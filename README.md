@@ -5,6 +5,8 @@
 > _WACV 2024_ <br/>
 > Azin Jahedi, Maximilian Luz, Marc Rivinius and Andrés Bruhn
 
+If you find our work useful please [cite via BibTeX](CITATIONS.bib).
+
 ## Requirements
 
 The code has been tested with PyTorch 1.10.2+cu113.

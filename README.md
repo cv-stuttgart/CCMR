@@ -1,5 +1,5 @@
 # CCMR
-This is the inference code of our `CCMR` optical flow estimation method.
+[WACV24] This is the inference code of our `CCMR` optical flow estimation method.
 
  **[CCMR: High Resolution Optical Flow Estimation via Coarse-to-Fine Context-Guided Motion Reasoning](https://openaccess.thecvf.com/content/WACV2024/papers/Jahedi_CCMR_High_Resolution_Optical_Flow_Estimation_via_Coarse-To-Fine_Context-Guided_Motion_WACV_2024_paper.pdf)**<br/>
 > _WACV 2024_ <br/>

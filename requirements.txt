@@ -1,0 +1,12 @@
+--extra-index-url https://download.pytorch.org/whl/cu113
+torch
+torchvision
+torchaudio
+matplotlib
+scipy
+tensorboard
+opencv-python
+tqdm
+parse
+timm
+flowpy

@@ -55,8 +55,8 @@ To compile the CUDA correlation module run the following once:
 ```Shell
 cd alt_cuda_corr && python setup.py install && cd ..
 ```
-
-And to reproduce our benchmark results after finetuning run:
+You can download the pre-trained models from [the release page](https://github.com/cv-stuttgart/CCMR/releases).
+To reproduce our benchmark results after finetuning run:
 ```Shell
 python evaluate.py --model_type "CCMR+" --model models/CCMR+_sintel.pth --dataset sintel_test
 python evaluate.py --model_type "CCMR+" --model models/CCMR+_kitti.pth --dataset kitti_test

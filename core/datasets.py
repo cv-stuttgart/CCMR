@@ -8,6 +8,8 @@ from glob import glob
 import os.path as osp
 from utils import frame_utils
 from utils.augmentor import FlowAugmentor, SparseFlowAugmentor
+import parse
+import logging
 extention = './data/'
 
 class FlowDataset(data.Dataset):
@@ -150,4 +152,195 @@ class KITTI(FlowDataset):
 
         if split == 'training':
             self.flow_list = sorted(glob(osp.join(root, 'flow_occ/*_10.png')))
+
+class FlyingChairs(FlowDataset):
+    def __init__(self, aug_params=None, split='training', root='fc/data'):
+        root = extention + root
+        super(FlyingChairs, self).__init__(aug_params)
+
+        images = sorted(glob(osp.join(root, '*.ppm')))
+        flows = sorted(glob(osp.join(root, '*.flo')))
+        assert (len(images)//2 == len(flows))
+
+        split_list = np.loadtxt('chairs_split.txt', dtype=np.int32)
+        for i in range(len(flows)):
+            xid = split_list[i]
+            if (split=='training' and xid==1) or (split=='validation' and xid==2):
+                self.flow_list += [ flows[i] ]
+                self.image_list += [ [images[2*i], images[2*i+1]] ]
+
+
+class FlyingThings3D(FlowDataset):
+    def __init__(self, aug_params=None, root='/fth', split='training', dstype='frames_cleanpass'):
+        super(FlyingThings3D, self).__init__(aug_params)
+        root = extention + root
+
+        if split == 'training':
+            for cam in ['left']:
+                for direction in ['into_future', 'into_past']:
+                    image_dirs = sorted(glob(osp.join(root, dstype, 'TRAIN/*/*')))
+                    image_dirs = sorted([osp.join(f, cam) for f in image_dirs])
+
+                    flow_dirs = sorted(glob(osp.join(root, 'optical_flow/TRAIN/*/*')))
+                    flow_dirs = sorted([osp.join(f, direction, cam) for f in flow_dirs])
+
+                    for idir, fdir in zip(image_dirs, flow_dirs):
+                        images = sorted(glob(osp.join(idir, '*.png')) )
+                        flows = sorted(glob(osp.join(fdir, '*.pfm')) )
+                        for i in range(len(flows)-1):
+                            if direction == 'into_future':
+                                self.image_list += [ [images[i], images[i+1]] ]
+                                self.flow_list += [ flows[i] ]
+                            elif direction == 'into_past':
+                                self.image_list += [ [images[i+1], images[i]] ]
+                                self.flow_list += [ flows[i+1] ]
+
+        elif split == 'validation':
+            for cam in ['left']:
+                for direction in ['into_future', 'into_past']:
+                    image_dirs = sorted(glob(osp.join(root, dstype, 'TEST/*/*')))
+                    image_dirs = sorted([osp.join(f, cam) for f in image_dirs])
+
+                    flow_dirs = sorted(glob(osp.join(root, 'optical_flow/TEST/*/*')))
+                    flow_dirs = sorted([osp.join(f, direction, cam) for f in flow_dirs])
+
+                    for idir, fdir in zip(image_dirs, flow_dirs):
+                        images = sorted(glob(osp.join(idir, '*.png')))
+                        flows = sorted(glob(osp.join(fdir, '*.pfm')))
+                        for i in range(len(flows) - 1):
+                            if direction == 'into_future':
+                                self.image_list += [[images[i], images[i + 1]]]
+                                self.flow_list += [flows[i]]
+                            elif direction == 'into_past':
+                                self.image_list += [[images[i + 1], images[i]]]
+                                self.flow_list += [flows[i + 1]]
+
+                valid_list = np.loadtxt('things_val_test_set.txt', dtype=np.int32)
+                self.image_list = [self.image_list[ind] for ind, sel in enumerate(valid_list) if sel]
+                self.flow_list = [self.flow_list[ind] for ind, sel in enumerate(valid_list) if sel]
+      
+
+class Viper(FlowDataset):
+    def __init__(self, aug_params=None, root='viper', split='train', show_extra_info=False):
+        super(Viper, self).__init__(aug_params, show_extra_info=show_extra_info, sparse=True)
+
+        root = osp.join(extention, root, split)
+        img_root = osp.join(root, 'img')
+        flow_root = osp.join(root, 'flow')
+
+        if split == 'train':            # ignore large outliers
+            self.max_flow = 2048
+
+        flows = []
+        imgs = []
+        info = []
+
+        for group in sorted(os.listdir(img_root)):
+            for img1 in sorted(os.listdir(osp.join(img_root, group))):
+                num = parse.parse(group + "_{:05d}.jpg", img1)[0]
+
+                img1 = osp.join(img_root, group, img1)
+                img2 = osp.join(img_root, group, f"{group}_{num + 1:05d}.jpg")
+                flow = osp.join(flow_root, group, f"{group}_{num:05d}.npz")
+
+                if not osp.exists(img2) or not osp.exists(flow):
+                    continue 
+
+                if osp.getsize(flow) == 0 or osp.getsize(img1) == 0 or osp.getsize(img2) == 0:
+                    continue 
+
+                imgs += [(img1, img2)]
+                flows += [flow]
+                info += [(group, num)]
+
+        self.image_list = imgs
+        self.flow_list = flows
+        self.extra_info = info
+
+
+class HD1K(FlowDataset):
+    def __init__(self, aug_params=None, root='HD1k'):
+        root = extention + root
+        super(HD1K, self).__init__(aug_params, sparse=True)
+
+        seq_ix = 0
+        while 1:
+            flows = sorted(glob(os.path.join(root, 'hd1k_flow_gt', 'flow_occ/%06d_*.png' % seq_ix)))
+            images = sorted(glob(os.path.join(root, 'hd1k_input', 'image_2/%06d_*.png' % seq_ix)))
+
+            if len(flows) == 0:
+                break
+
+            for i in range(len(flows)-1):
+                self.flow_list += [flows[i]]
+                self.image_list += [ [images[i], images[i+1]] ]
+
+            seq_ix += 1
+
+
+def fetch_dataloader(args, phase, TRAIN_DS='C+T+K+S+H'):
+    """ Create the data loader for the corresponding trainign set """
+
+    if args["train"]["dataset"][phase] == 'chairs':
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.1, 'max_scale': 1.0, 'do_flip': True}
+        train_dataset = FlyingChairs(aug_params, split='training')
+    
+    elif args["train"]["dataset"][phase] == 'things':
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.4, 'max_scale': 0.8, 'do_flip': True}
+        clean_dataset = FlyingThings3D(aug_params, dstype='frames_cleanpass')
+        final_dataset = FlyingThings3D(aug_params, dstype='frames_finalpass')
+        train_dataset = clean_dataset + final_dataset
+
+    elif args["train"]["dataset"][phase] == 'sintel':
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.2, 'max_scale': 0.6, 'do_flip': True}
+        things = FlyingThings3D(aug_params, dstype='frames_cleanpass')
+        sintel_clean = MpiSintel(aug_params, split='training', dstype='clean')
+        sintel_final = MpiSintel(aug_params, split='training', dstype='final')        
+
+        kitti = KITTI({'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.3, 'max_scale': 0.5, 'do_flip': True})
+        hd1k = HD1K({'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.5, 'max_scale': 0.2, 'do_flip': True})
+        train_dataset = 100*sintel_clean + 100*sintel_final + 200*kitti + 5*hd1k + things
+          
+    elif args["train"]["dataset"][phase] == 'kitti4_vip6':
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.3, 'max_scale': 0.5, 'do_flip': True}
+        kitti = KITTI(aug_params)
+
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.5, 'max_scale': 0.2, 'do_flip': True}
+        hd1k = HD1K(aug_params)
+
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.8, 'max_scale': 0.1, 'do_flip': True}
+        viper = Viper(aug_params)
+
+        train_dataset = 600 * kitti + 10 * hd1k + 13 * viper
+
+    elif args["train"]["dataset"][phase] == 'sintel_f10_c7':
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.2, 'max_scale': 0.6, 'do_flip': True}
+        things = FlyingThings3D(aug_params, dstype='frames_cleanpass')
+        sintel_clean = MpiSintel(aug_params, split='training', dstype='clean')
+        sintel_final = MpiSintel(aug_params, split='training', dstype='final')        
+
+        kitti = KITTI({'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.3, 'max_scale': 0.5, 'do_flip': True})
+        hd1k = HD1K({'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.5, 'max_scale': 0.2, 'do_flip': True})
+        train_dataset = 70*sintel_clean + 100*sintel_final + 200*kitti + 5*hd1k + things
+
+    elif args["train"]["dataset"][phase] == 'sintel_f10_c5':
+        aug_params = {'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.2, 'max_scale': 0.6, 'do_flip': True}
+        things = FlyingThings3D(aug_params, dstype='frames_cleanpass')
+        sintel_clean = MpiSintel(aug_params, split='training', dstype='clean')
+        sintel_final = MpiSintel(aug_params, split='training', dstype='final')        
+
+        kitti = KITTI({'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.3, 'max_scale': 0.5, 'do_flip': True})
+        hd1k = HD1K({'crop_size': args["train"]["image_size"][phase], 'min_scale': -0.5, 'max_scale': 0.2, 'do_flip': True})
+        train_dataset = 50*sintel_clean + 100*sintel_final + 200*kitti + 5*hd1k + things
+    
+    else:
+        ds = args["train"]["dataset"][phase]
+        raise ValueError(f"unsupported dataset type {ds}")
+
+    train_loader = data.DataLoader(train_dataset, batch_size=args["train"]["batch_size"][phase], 
+        pin_memory=False, shuffle=True, num_workers=4, drop_last=True)
+
+    logger = logging.getLogger("ccmr.train")
+    logger.info('Training with %d image pairs' % len(train_dataset))
+    return train_loader, len(train_dataset)
 

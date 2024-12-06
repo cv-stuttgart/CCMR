@@ -65,6 +65,17 @@ python evaluate.py --model_type "CCMR" --model models/CCMR_sintel.pth --dataset 
 python evaluate.py --model_type "CCMR" --model models/CCMR_kitti.pth --dataset kitti_test
 ```
 
+## Training CCMR(+)
+To train the 3-scale CCMR model run the following:
+```Shell
+python train.py --config train_ccmr.json
+```
+and to train the CCMR+ model run:
+```Shell
+python train.py --config train_ccmr_plus.json
+```
+The corresponding log files and checkpoints will be saved under `./checkpoints/name_of_the_experiment`.
+
 ## License
 - Our code is licensed under the BSD 3-Clause **No Military** License. See [LICENSE](LICENSE).
 - The provided checkpoints are under the [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) license.

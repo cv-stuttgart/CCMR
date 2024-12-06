@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from update import BasicUpdateBlock
 from extractor import BasicEncoder_resconv, Basic_Context_Encoder_resconv
-from broad_corr import CudaBroadCorrBlock
+from broad_corr import CudaBroadCorrBlock, CorrBlock
 from utils.utils import coords_grid, upflow2
 from update import BasicUpdateBlock
 from core.xcit import XCiT
@@ -42,6 +42,13 @@ class CCMR(nn.Module):
         
         self.hidden_dim = 128
         self.context_dim = 128
+
+        if self.args["model_type"].casefold() == "ccmr":
+            self.args["num_scales"] = 3
+        elif self.args["model_type"].casefold() == "ccmr+":
+            self.args["num_scales"] = 4
+        else:
+            raise ValueError(f'Model type "{self.args["model_type"]}" Unknown.')
 
         #Initiating the improved multi-scale feature encoders:
         self.fnet = BasicEncoder_resconv(output_dim=256,  norm_fn= self.args["fnet_norm"], model_type=self.args["model_type"])   
@@ -118,9 +125,16 @@ class CCMR(nn.Module):
         for index, (fmap1, fmap2) in enumerate(fnet_pyramid):
             fmap1 = fmap1.float()
             fmap2 = fmap2.float()
-                
-            corr_fn = CudaBroadCorrBlock(fmap1, fmap2, self.correlation_depth) # This could be replaced with MS-RAFT's Corrblock for faster performance - But then it requires 12.5 GB for inference and 3 A100 GPUs (40GB each) for training.
-    
+            if self.args['cuda_corr']:
+                '''
+                This must be used for training the CCMR+ (4-scale) model.
+                If your GPUs don't have much VRAM (< 40 GBs), also use this for the CCMR (3-scale) model.
+                For validating CCMR+ on large images, use this option to save memory. 
+                This option can also be used for computing the flow by the (3-scale) CCMR model to save memory (for smaller GPUs).
+                '''
+                corr_fn = CudaBroadCorrBlock(fmap1, fmap2, self.correlation_depth) 
+            else:
+                corr_fn = CorrBlock(fmap1, fmap2)  
             net, inp = torch.split(cnet_pyramid[index], [128, 128], dim=1)
             net = torch.tanh(net)
             inp = torch.relu(inp)

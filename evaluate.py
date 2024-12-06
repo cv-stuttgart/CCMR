@@ -187,30 +187,109 @@ def validate_kitti(model, iters, padding="kitti"):
     logger.warning("Kitti validation:%f, %f" % (epe, f1))
     return {'kitti-epe': epe, 'kitti-f1': f1}
 
+@torch.no_grad()
+def validate_chairs(model, data_on_cluster=False, iters=[8, 10, 15]):
+    """ Perform evaluation on the FlyingChairs (validation) split """
+    model.eval()
+    epe_list = []
+
+    val_dataset = datasets.FlyingChairs(split='validation')
+    
+    for val_id in tqdm(range(len(val_dataset))):
+        image1, image2, flow_gt, _ = val_dataset[val_id]
+        image1 = image1[None].cuda()
+        image2 = image2[None].cuda()
+
+        _, flow_pr = model(image1, image2, iters=iters, test_mode=True)
+        epe = torch.sum((flow_pr[0].cpu() - flow_gt)**2, dim=0).sqrt()
+        epe_list.append(epe.view(-1).numpy())
+
+    epe = np.mean(np.concatenate(epe_list))
+    print("Validation Chairs iters:%d EPE: %f" %(sum(iters), epe))
+    return {'chairs': epe}
+
+@torch.no_grad()
+def validate_sintel_during_training(model, warm= True, iters=[8, 10, 15]):
+    """ Peform validation using the Sintel (train) split """
+    model.eval()
+    results = {}
+    coarsest_scale = 16
+    for dstype in ['clean', 'final']:
+        val_dataset = datasets.MpiSintel(split='training', dstype=dstype, show_extra_info = True)
+        epe_list = []
+        efel_list= []
+
+        flow_prev, sequence_prev = None, None
+
+        for val_id in tqdm(range(len(val_dataset))):
+            image1, image2, flow_gt, _, (sequence, frame) = val_dataset[val_id]
+            image1 = image1[None].cuda()
+            image2 = image2[None].cuda()
+
+            if sequence != sequence_prev:
+                flow_prev = None
+
+            padder = InputPadder(image1.shape, coarsest_scale=coarsest_scale)
+            image1, image2 = padder.pad(image1, image2)
+           
+            flow_low, flow_pr = model(image1, image2, iters=iters, flow_init=flow_prev, test_mode=True)
+            flow = padder.unpad(flow_pr[0]).cpu()
+
+            if warm:
+                flow_prev = forward_interpolate(flow_low[0])[None].cuda()
+
+            epe = torch.sum((flow - flow_gt)**2, dim=0).sqrt()
+            epe_list.append(epe.view(-1).numpy())
+            #****
+            mag = torch.sum(flow_gt**2, dim=0).sqrt()
+            epe = epe.view(-1)
+            mag = mag.view(-1)
+            efel = ((epe > 3.0) & ((epe/mag) > 0.05)).float()
+            efel_list.append(efel.cpu().numpy())
+            #******
+            sequence_prev = sequence
+
+        efel_list = np.concatenate(efel_list)
+        FL = 100 * np.mean(efel_list)
+
+        epe_all = np.concatenate(epe_list)
+        epe = np.mean(epe_all)
+        px1 = np.mean(epe_all<1)
+        px3 = np.mean(epe_all<3)
+        px5 = np.mean(epe_all<5)
+
+        print("Validation WARM: %s (%s) EPE: %f, 1px: %f, 3px: %f, 5px: %f, FL_error: %f" % (str(warm), dstype, epe, px1, px3, px5, FL))
+        if warm:
+            results['warm' + dstype] = np.mean(epe_list)
+            results['warm' + dstype + 'FL_error'] = FL
+        else:
+            results[dstype] = np.mean(epe_list)
+            results[dstype + 'FL_error'] = FL
+
+    return results
+
 
 def str2bool(v):
   return v.lower() in ("yes", "true", "t", "1", "True")
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', help="restore checkpoint")
-    parser.add_argument('--model_type', choices=['CCMR', 'CCMR+'], default="CCMR+", help="Choose \"CCMR\" or \"CCMR+\" for the 3-scale and 4-scale version, respectively.")
+    parser.add_argument('--model_type', choices=['ccmr', 'ccmr+'], default="ccmr+", help="Choose \"ccmr\" or \"ccmr+\" for the 3-scale and 4-scale version, respectively.")
     parser.add_argument('--dataset', help="dataset for evaluation")
-    parser.add_argument('--num_scales', type=int, help="3 for CCMR and 4 for CCMR+", default=4)
+    parser.add_argument('--cuda_corr', default=True, type = str2bool, help="Set true for evaluating the CCMR+ model on large images! It can be used also for the CCMR model to save memory.")
     parser.add_argument('--mixed_precision', help='use mixed precision', type = str2bool, default = True)
 
     args = parser.parse_args()
     config = cpy_eval_args_to_config(args)
     
     
-    if config["model_type"] == "CCMR":
+    if config["model_type"].casefold() == "ccmr":
         sintel_iters = [8, 10, 15]
         kitti_iters = [6, 8, 30] 
-        config["num_scales"] = 3
         
-    elif config["model_type"] == "CCMR+":
+    elif config["model_type"].casefold() == "ccmr+":
         sintel_iters = [8, 10, 10, 10]
         kitti_iters = [35, 35, 5, 15]
-        config["num_scales"] = 4
     
     model = torch.nn.DataParallel(CCMR(config))
     model.load_state_dict(torch.load(config["model"]))

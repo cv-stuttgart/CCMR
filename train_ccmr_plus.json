@@ -1,0 +1,36 @@
+{
+        "name": "ccmr_plus",
+        "model_type": "CCMR+",
+        "epsilon": 1e-8,
+        "mixed_precision": true,
+        "gpus": [0, 1, 2],
+        "fnet_norm": "group",
+        "cnet_norm": "group",
+        "grad_acc":[1,1,1,1],
+        "cuda_corr": true,
+        "agg_cnet":true,
+        "agg_num_heads":8,
+        "agg_mlp_ratio":1,
+        "agg_depth":1,
+        "agg_shared":false,
+        "agg_cnet_num_heads":8,
+        "agg_cnet_mlp_ratio":1,
+        "agg_cnet_depth":1,
+        "agg_cnet_shared":false,
+        "f_no_act":true,
+        "c_no_act":"M",
+        "train": {
+                "iters": [4, 5, 5, 6],
+                "eval_iters": [[5, 5, 8, 10], [5, 5, 8, 10], [5, 5, 8, 10], [5, 5, 8, 10]],
+                "num_steps": [120000, 120000, 120000, 50000],
+                "lr": [0.00025, 0.000125, 0.000125, 0.000125],
+                "dataset": ["chairs", "things", "sintel_f10_c5", "kitti4_vip6"],
+                "batch_size": [9, 6, 6, 6],
+                "image_size": [[368, 496], [400, 720], [368, 768], [288, 960]],
+                "wdecay": [0.0001, 0.0001, 0.00001, 0.00001],
+                "gamma": [0.8, 0.8, 0.85, 0.85],
+                "validation": ["chairs", "sintel", "sintel", "kitti"],
+                "loss": ["L2", "L2", "L2", "rob_samplewise07"]
+                 }
+        
+}

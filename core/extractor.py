@@ -94,7 +94,7 @@ class BasicEncoder_resconv(nn.Module):
         self.up_layer1 = self._make_layer(96, stride=1)
         self.after_up_layer1_conv = nn.Conv2d(96, 96, kernel_size=1)
 
-        if self.model_type == "CCMR+":
+        if self.model_type.casefold() == "ccmr+":
             self.in_planes = 96 + 64
             self.up_layer0 = self._make_layer(64, stride=1)
             self.after_up_layer0_conv = nn.Conv2d(64, 64, kernel_size=1)
@@ -152,7 +152,7 @@ class BasicEncoder_resconv(nn.Module):
         up1layer_input = torch.cat((up2_out_resized, enc_out2), dim=1)
         up1_out = self.after_up_layer1_conv(self.up_layer1(up1layer_input))
 
-        if self.model_type == "CCMR+":
+        if self.model_type.casefold() == "ccmr+":
             #uplayer0:
             cur_h, cur_w = list(enc_out1.size())[-2:]
             up1_out_resized = TF.resize(up1_out, (cur_h, cur_w))
@@ -164,7 +164,7 @@ class BasicEncoder_resconv(nn.Module):
             up0_out = torch.split(up0_out, [batch_dim, batch_dim], dim=0)
 
             return [enc_out4, up2_out, up1_out, up0_out]    
-        elif self.model_type == "CCMR":
+        elif self.model_type.casefold() == "ccmr":
             enc_out4 = torch.split(enc_out4, [batch_dim, batch_dim], dim=0)
             up2_out = torch.split(up2_out, [batch_dim, batch_dim], dim=0)
             up1_out = torch.split(up1_out, [batch_dim, batch_dim], dim=0)
@@ -208,7 +208,7 @@ class Basic_Context_Encoder_resconv(nn.Module):
         self.in_planes = 256 + 96
         self.up_layer1 = self._make_layer(96, stride=1)
         self.after_up_layer1_conv = nn.Conv2d(96, output_dim, kernel_size=1) 
-        if self.model_type == "CCMR+":
+        if self.model_type.casefold() == "ccmr+":
             self.in_planes = 256 + 64
             self.up_layer0 = self._make_layer(64, stride=1)
             self.after_up_layer0_conv = nn.Conv2d(64, output_dim, kernel_size=1) 
@@ -266,7 +266,7 @@ class Basic_Context_Encoder_resconv(nn.Module):
         up2_out_resized = TF.resize(up2_out, (cur_h, cur_w))
         up1layer_input = torch.cat((up2_out_resized, enc_out2), dim=1)
         up1_out = self.after_up_layer1_conv(self.up_layer1(up1layer_input))
-        if self.model_type == "CCMR+":
+        if self.model_type.casefold() == "ccmr+":
             #uplayer0:
             cur_h, cur_w = list(enc_out1.size())[-2:]
             up1_out_resized = TF.resize(up1_out, (cur_h, cur_w))
@@ -274,5 +274,5 @@ class Basic_Context_Encoder_resconv(nn.Module):
             up0_out = self.after_up_layer0_conv(self.up_layer0(up0layer_input))
             return [enc_out4, up2_out, up1_out, up0_out]  
         
-        elif self.model_type == "CCMR":  
+        elif self.model_type.casefold() == "ccmr":  
             return [enc_out4, up2_out, up1_out] 

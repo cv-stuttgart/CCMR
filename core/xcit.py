@@ -129,7 +129,6 @@ class XCA(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        print('Self-att XCiT')
 
     def forward(self, x):
         B, N, C = x.shape
@@ -172,7 +171,6 @@ class XCA_separate(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
-        print('Cross-att XCA')
 
     def forward(self, x_qk, x_v):
         B, N, C = x_qk.shape
